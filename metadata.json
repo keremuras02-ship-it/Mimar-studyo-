@@ -1,0 +1,6 @@
+{
+  "name": "MimarStüdyo",
+  "description": "İç ve dış mekan ev tasarımı, profesyonel AI render, fotoğraf düzenleme, 3D görüntüleyici, sanal tur, malzeme listesi ve bulut proje yönetimi uygulaması.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

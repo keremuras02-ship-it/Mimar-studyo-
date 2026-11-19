@@ -1,0 +1,177 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HARDENED HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    // --- ENTITY VALIDATION BLUEPRINTS ---
+    function isValidDesignProject(data, userId) {
+      return data.userId is string && data.userId == userId &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+        data.spaceType in ['INTERIOR', 'EXTERIOR', 'BOTH'] &&
+        data.style is string && data.style.size() >= 1 && data.style.size() <= 60 &&
+        data.roomCategory is string && data.roomCategory.size() >= 1 && data.roomCategory.size() <= 60 &&
+        data.areaSqm is number && data.areaSqm > 0 && data.areaSqm <= 50000 &&
+        data.promptSummary is string && data.promptSummary.size() <= 2000 &&
+        data.renderSettings is string && data.renderSettings.size() <= 300 &&
+        data.architecturalModelType in ['VILLA', 'LOFT', 'COURTYARD', 'DUPLEX'] &&
+        data.estimatedTotalTry is number && data.estimatedTotalTry >= 0 && data.estimatedTotalTry <= 1000000000 &&
+        data.phase in ['KONSEPT', 'UYGULAMA', 'TESLIM'] &&
+        (!('thumbnailBase64' in data) || data.thumbnailBase64 == null || (data.thumbnailBase64 is string && data.thumbnailBase64.size() <= 350000)) &&
+        (!('notes' in data) || data.notes == null || (data.notes is string && data.notes.size() <= 4000)) &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidMaterialItem(data, userId, projectId) {
+      return data.userId is string && data.userId == userId &&
+        data.projectId is string && data.projectId == projectId &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.category in ['YAPI', 'ZEMIN', 'CEPHE', 'AYDINLATMA', 'MOBILYA', 'PEYZAJ'] &&
+        data.specification is string && data.specification.size() <= 300 &&
+        data.quantity is number && data.quantity > 0 && data.quantity <= 1000000 &&
+        data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+        data.unitPriceTry is number && data.unitPriceTry >= 0 && data.unitPriceTry <= 100000000 &&
+        data.purchased is bool &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidChatMessage(data, userId) {
+      return data.userId is string && data.userId == userId &&
+        data.role in ['USER', 'MODEL'] &&
+        data.text is string && data.text.size() >= 1 && data.text.size() <= 12000 &&
+        data.thinkingUsed is bool &&
+        (!('attachedPrompt' in data) || data.attachedPrompt == null || (data.attachedPrompt is string && data.attachedPrompt.size() <= 1500)) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    // --- USER-SCOPED COLLECTIONS ---
+    match /users/{userId} {
+
+      // 1. Design Projects
+      match /projects/{projectId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(projectId);
+
+        allow create: if isOwner(userId) &&
+          isValidId(projectId) &&
+          incoming().keys().hasAll([
+            'userId', 'title', 'spaceType', 'style', 'roomCategory',
+            'areaSqm', 'promptSummary', 'renderSettings', 'architecturalModelType',
+            'estimatedTotalTry', 'phase', 'createdAt', 'updatedAt'
+          ]) &&
+          incoming().keys().hasOnly([
+            'userId', 'title', 'spaceType', 'style', 'roomCategory',
+            'areaSqm', 'promptSummary', 'renderSettings', 'architecturalModelType',
+            'thumbnailBase64', 'notes', 'estimatedTotalTry', 'phase',
+            'createdAt', 'updatedAt'
+          ]) &&
+          isValidDesignProject(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+          isValidId(projectId) &&
+          isValidDesignProject(incoming(), userId) &&
+          existing().phase != 'TESLIM' &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          (
+            // Action: Update project details, render preview, or 3D preset
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'spaceType', 'style', 'roomCategory', 'areaSqm',
+              'promptSummary', 'renderSettings', 'architecturalModelType',
+              'thumbnailBase64', 'notes', 'phase', 'updatedAt'
+            ]) ||
+            // Action: Sync recalculated estimated budget total
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'estimatedTotalTry', 'updatedAt'
+            ])
+          );
+
+        allow delete: if isOwner(userId) && isValidId(projectId);
+
+        // 2. Bill of Materials Subcollection
+        match /materials/{materialId} {
+          allow list: if isOwner(userId) && isValidId(projectId);
+          allow get: if isOwner(userId) && isValidId(projectId) && isValidId(materialId);
+
+          allow create: if isOwner(userId) &&
+            isValidId(projectId) &&
+            isValidId(materialId) &&
+            incoming().keys().hasAll([
+              'userId', 'projectId', 'name', 'category', 'specification',
+              'quantity', 'unit', 'unitPriceTry', 'purchased', 'createdAt', 'updatedAt'
+            ]) &&
+            incoming().keys().hasOnly([
+              'userId', 'projectId', 'name', 'category', 'specification',
+              'quantity', 'unit', 'unitPriceTry', 'purchased', 'createdAt', 'updatedAt'
+            ]) &&
+            isValidMaterialItem(incoming(), userId, projectId) &&
+            exists(/databases/$(database)/documents/users/$(userId)/projects/$(projectId));
+
+          allow update: if isOwner(userId) &&
+            isValidId(projectId) &&
+            isValidId(materialId) &&
+            isValidMaterialItem(incoming(), userId, projectId) &&
+            incoming().userId == existing().userId &&
+            incoming().projectId == existing().projectId &&
+            incoming().createdAt == existing().createdAt &&
+            (
+              // Action: Toggle procurement status
+              incoming().diff(existing()).affectedKeys().hasOnly(['purchased', 'updatedAt']) ||
+              // Action: Edit material specifications & pricing
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'name', 'category', 'specification', 'quantity', 'unit', 'unitPriceTry', 'purchased', 'updatedAt'
+              ])
+            );
+
+          allow delete: if isOwner(userId) && isValidId(projectId) && isValidId(materialId);
+        }
+      }
+
+      // 3. AI Architect Chat History
+      match /chat_messages/{messageId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(messageId);
+
+        allow create: if isOwner(userId) &&
+          isValidId(messageId) &&
+          incoming().keys().hasAll(['userId', 'role', 'text', 'thinkingUsed', 'createdAt']) &&
+          incoming().keys().hasOnly(['userId', 'role', 'text', 'thinkingUsed', 'attachedPrompt', 'createdAt']) &&
+          isValidChatMessage(incoming(), userId);
+
+        allow update: if false;
+        allow delete: if isOwner(userId) && isValidId(messageId);
+      }
+    }
+  }
+}

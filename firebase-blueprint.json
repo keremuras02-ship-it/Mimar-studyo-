@@ -1,0 +1,212 @@
+{
+  "entities": {
+    "DesignProject": {
+      "title": "DesignProject",
+      "description": "A cloud-saved interior, exterior, or full home architectural design project owned by a user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "title": {
+          "type": "string",
+          "description": "Project title (1 to 100 chars)."
+        },
+        "spaceType": {
+          "type": "string",
+          "enum": ["INTERIOR", "EXTERIOR", "BOTH"],
+          "description": "Design scope: interior, exterior, or both."
+        },
+        "style": {
+          "type": "string",
+          "description": "Architectural style name (1 to 60 chars)."
+        },
+        "roomCategory": {
+          "type": "string",
+          "description": "Primary room or facade category (1 to 60 chars)."
+        },
+        "areaSqm": {
+          "type": "number",
+          "description": "Project floor or plot area in square meters."
+        },
+        "promptSummary": {
+          "type": "string",
+          "description": "Summary of the design prompt or architectural brief."
+        },
+        "renderSettings": {
+          "type": "string",
+          "description": "Compact summary of render aspect ratio, resolution, lighting, and lens."
+        },
+        "architecturalModelType": {
+          "type": "string",
+          "enum": ["VILLA", "LOFT", "COURTYARD", "DUPLEX"],
+          "description": "Selected 3D architectural model preset."
+        },
+        "thumbnailBase64": {
+          "type": "string",
+          "description": "Optional compressed JPEG base64 thumbnail of the latest render."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional architectural notes."
+        },
+        "estimatedTotalTry": {
+          "type": "number",
+          "description": "Estimated total material cost in Turkish Lira."
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["KONSEPT", "UYGULAMA", "TESLIM"],
+          "description": "Project workflow phase; TESLIM is terminal."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp written via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-update timestamp written via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "title",
+        "spaceType",
+        "style",
+        "roomCategory",
+        "areaSqm",
+        "promptSummary",
+        "renderSettings",
+        "architecturalModelType",
+        "estimatedTotalTry",
+        "phase",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MaterialItem": {
+      "title": "MaterialItem",
+      "description": "A bill-of-materials line item belonging to a user's design project.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Denormalized owner Firebase Auth UID."
+        },
+        "projectId": {
+          "type": "string",
+          "description": "Parent project document ID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Material or fixture name (1 to 120 chars)."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["YAPI", "ZEMIN", "CEPHE", "AYDINLATMA", "MOBILYA", "PEYZAJ"],
+          "description": "Architectural material category."
+        },
+        "specification": {
+          "type": "string",
+          "description": "Technical material specification (0 to 300 chars)."
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Required quantity (> 0)."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Measurement unit such as m2, adet, m3, kg, mt."
+        },
+        "unitPriceTry": {
+          "type": "number",
+          "description": "Estimated unit price in Turkish Lira."
+        },
+        "purchased": {
+          "type": "boolean",
+          "description": "Whether the material has been procured."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp written via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-update timestamp written via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "projectId",
+        "name",
+        "category",
+        "specification",
+        "quantity",
+        "unit",
+        "unitPriceTry",
+        "purchased",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChatMessageRecord": {
+      "title": "ChatMessageRecord",
+      "description": "A persisted AI architect chatbot message owned by the user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["USER", "MODEL"],
+          "description": "Sender role in conversation."
+        },
+        "text": {
+          "type": "string",
+          "description": "Message body (1 to 12000 chars)."
+        },
+        "thinkingUsed": {
+          "type": "boolean",
+          "description": "Whether high-thinking architectural analysis mode was active."
+        },
+        "attachedPrompt": {
+          "type": "string",
+          "description": "Optional extracted render prompt suggestion."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp written via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "role",
+        "text",
+        "thinkingUsed",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/DesignProject" },
+      "description": "User-owned home architectural design projects."
+    },
+    "/users/{userId}/projects/{projectId}/materials/{materialId}": {
+      "schema": { "$ref": "#/entities/MaterialItem" },
+      "description": "Bill-of-materials items scoped under a specific user project."
+    },
+    "/users/{userId}/chat_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessageRecord" },
+      "description": "Persistent AI architect chat thread for each authenticated user."
+    }
+  }
+}
